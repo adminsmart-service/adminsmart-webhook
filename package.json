@@ -1,14 +1,17 @@
 ﻿{
   "name": "adminsmart-webhook",
-  "version": "1.0.0",
-  "description": "Backend omnicanal para AdminSmart Pro",
+  "version": "1.1.0",
+  "description": "Backend omnicanal seguro para AdminSmart Pro",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.18.2",
-    "firebase-admin": "^11.11.0",
-    "axios": "^1.6.2"
+    "express": "^4.21.0",
+    "firebase-admin": "^12.0.0",
+    "axios": "^1.7.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
