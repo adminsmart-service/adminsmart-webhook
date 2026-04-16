@@ -1,78 +1,59 @@
 ﻿const express = require('express');
-const admin = require('firebase-admin');
-const { GoogleGenerativeAI } = require("@google/generative-ai"); // Importamos Gemini
+const cors = require('cors'); // Vital para el chat web
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const app = express();
+
+app.use(cors());
 app.use(express.json());
 
-// --- CONFIGURACIÓN DE GEMINI ---
-// Render leerá automáticamente la clave que pusiste en Environment
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// --- TU BASE DE CONOCIMIENTOS (FAQs) ---
-// Todo lo que escribas acá será la única verdad para el bot.
-const CONTEXTO_NEGOCIO = `
-  Eres el asistente inteligente de AdminSmart Pro. 
-  Tu objetivo es ayudar a pequeñas y medianas empresas a automatizar su atención al cliente.
+// --- ESTA ES TU BASE DE DATOS DE CONOCIMIENTO (FAQS) ---
+// Aquí es donde el usuario (vos) carga la información que la IA debe respetar.
+const MIS_DATOS_NEGOCIO = `
+  Eres el asistente oficial de AdminSmart Pro.
+  REGLAS DE ORO:
+  1. Solo respondes basándote en la información de abajo.
+  2. Si el usuario pregunta algo que no está aquí, dices: "Esa información no la tengo, pero puedo comunicarte con un asesor".
   
-  Información importante:
-  - AdminSmart Pro es un SaaS de chatbots automatizados.
-  - Ofrecemos integración con WhatsApp, Instagram y Web.
-  - Beneficios: Atención 24/7, respuestas instantáneas y reducción de costos operativos.
-  - Si no sabes la respuesta a algo específico, di que un asesor humano se contactará pronto.
-  - Mantén un tono profesional pero cercano y amable.
+  DATOS CARGADOS:
+  - AdminSmart Pro: SaaS de automatización inteligente para emprendedores.
+  - Funciones: Chatbots para WhatsApp, Instagram y Web que recuperan tu libertad.
+  - Integración: Gemini AI conectada a Webhooks de Meta.
+  - Ubicación: San José de Feliciano, Entre Ríos.
+  (Podés seguir agregando más datos aquí...)
 `;
 
-// Mensaje de bienvenida
 app.get('/', (req, res) => {
-    res.send('🚀 Centro de Operaciones AdminSmart Pro: Inteligencia Gemini ACTIVA.');
+    res.send('🚀 AdminSmart Pro: Servidor conectado y cerebro de IA listo.');
 });
 
-// Endpoint para el Chat Público (Web)
+// ESTE ES EL CABLEADO PARA EL CHAT PÚBLICO
 app.post('/chat-publico', async (req, res) => {
-    const { mensaje } = req.body;
+    const { mensaje, datosUsuario } = req.body; // Recibe el mensaje y opcionalmente datos del usuario
     
     try {
-        const prompt = `${CONTEXTO_NEGOCIO}\n\nCliente pregunta: ${mensaje}\nRespuesta corta y precisa:`;
-        const result = await model.generateContent(prompt);
+        // Construimos el prompt usando los datos que cargaste (FAQs)
+        let promptFull = `${MIS_DATOS_NEGOCIO}\n\n`;
+        
+        if(datosUsuario) {
+            promptFull += `Datos del cliente actual: ${JSON.stringify(datosUsuario)}\n`;
+        }
+        
+        promptFull += `Pregunta del cliente: ${mensaje}\nRespuesta de AdminSmart Pro:`;
+
+        const result = await model.generateContent(promptFull);
         const respuestaIA = result.response.text();
         
         res.json({ respuesta: respuestaIA });
     } catch (error) {
-        console.error("Error con Gemini:", error);
-        res.status(500).json({ error: "Hubo un problema con el cerebro de la IA." });
-    }
-});
-
-// El Webhook para Meta (WhatsApp)
-app.post('/webhook', async (req, res) => {
-    // Verificamos si Meta está enviando un mensaje
-    const body = req.body;
-
-    if (body.object === 'whatsapp_business_account') {
-        try {
-            // Aquí extraemos el texto del mensaje (Simplificado)
-            const msgText = body.entry[0].changes[0].value.messages[0].text.body;
-            
-            // Consultamos a Gemini
-            const prompt = `${CONTEXTO_NEGOCIO}\n\nCliente por WhatsApp: ${msgText}\nIA responde:`;
-            const result = await model.generateContent(prompt);
-            const respuestaIA = result.response.text();
-
-            console.log('IA respondió a WhatsApp:', respuestaIA);
-            
-            // AQUÍ IRÍA EL CÓDIGO PARA ENVIAR EL MENSAJE DE VUELTA A WHATSAPP
-            
-            res.sendStatus(200);
-        } catch (err) {
-            res.sendStatus(200); // Siempre respondemos 200 a Meta para que no reintente
-        }
-    } else {
-        res.sendStatus(404);
+        console.error("Error en Gemini:", error);
+        res.status(500).json({ error: "Falla en el cableado de la IA." });
     }
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor de AdminSmart con Gemini en puerto ${PORT}`);
+    console.log(`🚀 Cableado completo en puerto ${PORT}`);
 });
