@@ -4,7 +4,11 @@ const admin = require('firebase-admin');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: '*', // Esto permite que cualquier origen (como tu app de Firebase) se conecte
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+}));
 app.use(express.json());
 
 // --- CONFIGURACIÓN DE FIREBASE ---
