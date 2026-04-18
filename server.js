@@ -108,7 +108,8 @@ app.post('/chat-publico', async (req, res) => {
         
         res.status(500).json({ 
             respuesta: "Error interno", 
-            debug: error.message
+            debug: error.message 
+        });
     } // <-- Cierra el catch
 }); // <-- Cierra el app.post
 
