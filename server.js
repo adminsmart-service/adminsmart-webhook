@@ -5,9 +5,9 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const app = express();
 app.use(cors({
-  origin: '*', // Esto permite que cualquier origen (como tu app de Firebase) se conecte
-  methods: ['GET', 'POST'],
-  allowedHeaders: ['Content-Type']
+  origin: '*', // Permite peticiones desde cualquier lugar (incluyendo tu app de Firebase)
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 app.use(express.json());
 
