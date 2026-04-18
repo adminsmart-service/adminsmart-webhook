@@ -91,8 +91,3 @@ app.post('/chat-publico', async (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Puente soldado en puerto ${PORT}`));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-    console.log(`🚀 Cableado completo en puerto ${PORT}`);
-});
