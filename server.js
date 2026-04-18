@@ -33,10 +33,14 @@ try {
 }
 const db = admin.firestore();
 
-// --- CONFIGURACIÓN DE GEMINI ---
+// --- CONFIGURACIÓN DE GEMINI (FORZADO TOTAL) ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Forzamos el nombre completo y la versión de API estable
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-pro" 
+    model: "gemini-1.5-flash" 
+}, { 
+    apiVersion: 'v1' 
 });
 
 app.get('/', (req, res) => res.send('🚀 AdminSmart Engine Omnicanal Activo'));
