@@ -1,57 +1,96 @@
 ﻿const express = require('express');
-const cors = require('cors'); // Vital para el chat web
+const cors = require('cors');
+const admin = require('firebase-admin');
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const app = express();
 
+const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- CONFIGURACIÓN DE FIREBASE ---
+if (!admin.apps.length) {
+    admin.initializeApp({
+        credential: admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        })
+    });
+}
+const db = admin.firestore();
+
+// --- CONFIGURACIÓN DE GEMINI ---
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// --- ESTA ES TU BASE DE DATOS DE CONOCIMIENTO (FAQS) ---
-// Aquí es donde el usuario (vos) carga la información que la IA debe respetar.
-const MIS_DATOS_NEGOCIO = `
-  Eres el asistente oficial de AdminSmart Pro.
-  REGLAS DE ORO:
-  1. Solo respondes basándote en la información de abajo.
-  2. Si el usuario pregunta algo que no está aquí, dices: "Esa información no la tengo, pero puedo comunicarte con un asesor".
-  
-  DATOS CARGADOS:
-  - AdminSmart Pro: SaaS de automatización inteligente para emprendedores.
-  - Funciones: Chatbots para WhatsApp, Instagram y Web que recuperan tu libertad.
-  - Integración: Gemini AI conectada a Webhooks de Meta.
-  - Ubicación: San José de Feliciano, Entre Ríos.
-  (Podés seguir agregando más datos aquí...)
-`;
+app.get('/', (req, res) => res.send('🚀 AdminSmart Engine Omnicanal Activo'));
 
-app.get('/', (req, res) => {
-    res.send('🚀 AdminSmart Pro: Servidor conectado y cerebro de IA listo.');
-});
-
-// ESTE ES EL CABLEADO PARA EL CHAT PÚBLICO
 app.post('/chat-publico', async (req, res) => {
-    const { mensaje, datosUsuario } = req.body; // Recibe el mensaje y opcionalmente datos del usuario
-    
-    try {
-        // Construimos el prompt usando los datos que cargaste (FAQs)
-        let promptFull = `${MIS_DATOS_NEGOCIO}\n\n`;
-        
-        if(datosUsuario) {
-            promptFull += `Datos del cliente actual: ${JSON.stringify(datosUsuario)}\n`;
-        }
-        
-        promptFull += `Pregunta del cliente: ${mensaje}\nRespuesta de AdminSmart Pro:`;
+    const { mensaje, userId } = req.body;
 
-        const result = await model.generateContent(promptFull);
+    if (!userId || !mensaje) return res.status(400).send("Faltan datos");
+
+    try {
+        // 1. BUSCAR AL USUARIO (Colección 'users')
+        const userRef = db.collection('users').doc(userId);
+        const userDoc = await userRef.get();
+
+        if (!userDoc.exists) return res.status(404).send("Usuario no encontrado");
+        const userData = userDoc.data();
+
+        // 2. CONTROL DE MENSAJES (msgCount vs limite)
+        const currentCount = userData.msgCount || 0;
+        const limit = userData.limiteMensajes || 50; // Ajustá según tu campo
+
+        if (currentCount >= limit) {
+            return res.json({ respuesta: "Lo siento, este servicio ha alcanzado su límite mensual." });
+        }
+
+        // 3. BUSCAR TODAS SUS FAQS (Colección 'faqs' filtrando por 'uid')
+        const faqsSnapshot = await db.collection('faqs').where('uid', '==', userId).get();
+        let contextoFaqs = "";
+        faqsSnapshot.forEach(doc => {
+            const d = doc.data();
+            contextoFaqs += `P: ${d.question || d.pregunta} - R: ${d.answer || d.respuesta}\n`;
+        });
+
+        // 4. ARMAR EL PROMPT VENDEDOR (Híbrido)
+        const prompt = `
+            Eres el asistente de ventas inteligente de "${userData.config?.businessName || 'nuestra empresa'}".
+            
+            CONOCIMIENTO DEL NEGOCIO:
+            ${contextoFaqs}
+            
+            CATÁLOGO/LINKS:
+            ${userData.config?.catalogUrl ? 'Catálogo: ' + userData.config.catalogUrl : ''}
+            
+            INSTRUCCIONES:
+            - Usa el conocimiento de arriba para responder.
+            - Si el cliente pregunta varias cosas, respóndelas todas con cordialidad.
+            - Sé vendedor, amable y usa emojis.
+            - Si no sabes la respuesta, ofrece derivar a WhatsApp.
+            
+            CLIENTE PREGUNTA: "${mensaje}"
+            RESPUESTA VENDEDORA:
+        `;
+
+        // 5. GENERAR RESPUESTA CON GEMINI
+        const result = await model.generateContent(prompt);
         const respuestaIA = result.response.text();
+
+        // 6. ACTUALIZAR CONTADOR Y RESPONDER
+        await userRef.update({ msgCount: admin.firestore.FieldValue.increment(1) });
         
         res.json({ respuesta: respuestaIA });
+
     } catch (error) {
-        console.error("Error en Gemini:", error);
-        res.status(500).json({ error: "Falla en el cableado de la IA." });
+        console.error("Error en el Puente:", error);
+        res.status(500).json({ respuesta: "Estamos experimentando una alta demanda, ¿podrías repetir?" });
     }
 });
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`🚀 Puente soldado en puerto ${PORT}`));
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
