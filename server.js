@@ -12,14 +12,24 @@ app.use(cors({
 app.use(express.json());
 
 // --- CONFIGURACIÓN DE FIREBASE ---
-if (!admin.apps.length) {
-    admin.initializeApp({
-        credential: admin.credential.cert({
-            projectId: process.env.FIREBASE_PROJECT_ID,
-            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
-        })
-    });
+try {
+    if (!admin.apps.length) {
+        // Limpieza profunda de la Private Key
+        const privateKey = process.env.FIREBASE_PRIVATE_KEY 
+            ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
+            : undefined;
+
+        admin.initializeApp({
+            credential: admin.credential.cert({
+                projectId: process.env.FIREBASE_PROJECT_ID,
+                clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+                privateKey: privateKey,
+            })
+        });
+        console.log(">> ✅ Firebase inicializado correctamente");
+    }
+} catch (e) {
+    console.error(">> ❌ ERROR AL INICIALIZAR FIREBASE:", e.message);
 }
 const db = admin.firestore();
 
@@ -89,11 +99,18 @@ app.post('/chat-publico', async (req, res) => {
         
         res.json({ respuesta: respuestaIA });
 
-    } catch (error) {
-        console.error("Error en el Puente:", error);
-        res.status(500).json({ respuesta: "Estamos experimentando una alta demanda, ¿podrías repetir?" });
-    }
-});
+   } catch (error) {
+        // ESTO ES LO QUE VEREMOS EN LOS LOGS DE RENDER
+        console.error("🔥 ERROR DETECTADO:");
+        console.error("Nombre:", error.name);
+        console.error("Mensaje:", error.message);
+        console.error("Stack:", error.stack);
+        
+        res.status(500).json({ 
+            respuesta: "Error interno", 
+            debug: error.message
+    } // <-- Cierra el catch
+}); // <-- Cierra el app.post
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Puente soldado en puerto ${PORT}`));
