@@ -1,11 +1,11 @@
 ﻿const express = require('express');
 const cors = require('cors');
 const admin = require('firebase-admin');
-const { GoogleGenerativeAI } = require("@google/generative-ai");
+const axios = require('axios'); // Usaremos axios para el camino directo
 
 const app = express();
 app.use(cors({
-  origin: '*', // Permite peticiones desde cualquier lugar (incluyendo tu app de Firebase)
+  origin: '*',
   methods: ['GET', 'POST', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
@@ -14,7 +14,6 @@ app.use(express.json());
 // --- CONFIGURACIÓN DE FIREBASE ---
 try {
     if (!admin.apps.length) {
-        // Limpieza profunda de la Private Key
         const privateKey = process.env.FIREBASE_PRIVATE_KEY 
             ? process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n') 
             : undefined;
@@ -33,14 +32,6 @@ try {
 }
 const db = admin.firestore();
 
-// --- CONFIGURACIÓN DE GEMINI (FORZADO TOTAL) ---
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-
-// Forzamos el nombre completo y la versión de API estable
-const model = genAI.getGenerativeModel({ 
-    model: "models/gemini-1.5-flash" 
-});
-
 app.get('/', (req, res) => res.send('🚀 AdminSmart Engine Omnicanal Activo'));
 
 app.post('/chat-publico', async (req, res) => {
@@ -49,22 +40,22 @@ app.post('/chat-publico', async (req, res) => {
     if (!userId || !mensaje) return res.status(400).send("Faltan datos");
 
     try {
-        // 1. BUSCAR AL USUARIO (Colección 'users')
+        // 1. BUSCAR AL USUARIO
         const userRef = db.collection('users').doc(userId);
         const userDoc = await userRef.get();
 
         if (!userDoc.exists) return res.status(404).send("Usuario no encontrado");
         const userData = userDoc.data();
 
-        // 2. CONTROL DE MENSAJES (msgCount vs limite)
+        // 2. CONTROL DE MENSAJES
         const currentCount = userData.msgCount || 0;
-        const limit = userData.limiteMensajes || 50; // Ajustá según tu campo
+        const limit = userData.limiteMensajes || 50;
 
         if (currentCount >= limit) {
             return res.json({ respuesta: "Lo siento, este servicio ha alcanzado su límite mensual." });
         }
 
-        // 3. BUSCAR TODAS SUS FAQS (Colección 'faqs' filtrando por 'uid')
+        // 3. BUSCAR FAQS
         const faqsSnapshot = await db.collection('faqs').where('uid', '==', userId).get();
         let contextoFaqs = "";
         faqsSnapshot.forEach(doc => {
@@ -72,48 +63,46 @@ app.post('/chat-publico', async (req, res) => {
             contextoFaqs += `P: ${d.question || d.pregunta} - R: ${d.answer || d.respuesta}\n`;
         });
 
-        // 4. ARMAR EL PROMPT VENDEDOR (Híbrido)
-        const prompt = `
-            Eres el asistente de ventas inteligente de "${userData.config?.businessName || 'nuestra empresa'}".
-            
-            CONOCIMIENTO DEL NEGOCIO:
-            ${contextoFaqs}
-            
-            CATÁLOGO/LINKS:
-            ${userData.config?.catalogUrl ? 'Catálogo: ' + userData.config.catalogUrl : ''}
-            
-            INSTRUCCIONES:
-            - Usa el conocimiento de arriba para responder.
-            - Si el cliente pregunta varias cosas, respóndelas todas con cordialidad.
-            - Sé vendedor, amable y usa emojis.
-            - Si no sabes la respuesta, ofrece derivar a WhatsApp.
-            
-            CLIENTE PREGUNTA: "${mensaje}"
-            RESPUESTA VENDEDORA:
-        `;
+        // 4. ARMAR EL PROMPT
+        const businessName = userData.config?.businessName || 'nuestra empresa';
+        const catalog = userData.config?.catalogUrl ? 'Catálogo: ' + userData.config.catalogUrl : '';
+        
+        const promptTexto = `Eres el asistente de ventas inteligente de "${businessName}".
+        CONOCIMIENTO: ${contextoFaqs}
+        ${catalog}
+        INSTRUCCIONES: Sé amable, usa emojis y responde a: "${mensaje}"`;
 
-        // 5. GENERAR RESPUESTA CON GEMINI
-        const result = await model.generateContent(prompt);
-        const respuestaIA = result.response.text();
+        // 5. CAMINO DIRECTO A GEMINI (Usando Axios)
+        const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
+        
+        const response = await axios.post(GEMINI_URL, {
+            contents: [{
+                parts: [{ text: promptTexto }]
+            }]
+        });
+
+        // Extraemos el texto de la respuesta de Google
+        const respuestaIA = response.data.candidates[0].content.parts[0].text;
 
         // 6. ACTUALIZAR CONTADOR Y RESPONDER
         await userRef.update({ msgCount: admin.firestore.FieldValue.increment(1) });
         
         res.json({ respuesta: respuestaIA });
 
-   } catch (error) {
-        // ESTO ES LO QUE VEREMOS EN LOS LOGS DE RENDER
+    } catch (error) {
         console.error("🔥 ERROR DETECTADO:");
-        console.error("Nombre:", error.name);
-        console.error("Mensaje:", error.message);
-        console.error("Stack:", error.stack);
-        
-        res.status(500).json({ 
-            respuesta: "Error interno", 
-            debug: error.message 
-        });
-    } // <-- Cierra el catch
-}); // <-- Cierra el app.post
+        if (error.response) {
+            // Error que viene de Google
+            console.error("Detalle Google:", JSON.stringify(error.response.data));
+            res.status(500).json({ respuesta: "Error de IA", debug: error.response.data.error?.message });
+        } else {
+            // Error de código
+            console.error("Mensaje:", error.message);
+            res.status(500).json({ respuesta: "Error interno", debug: error.message });
+        }
+    }
+});
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Puente soldado en puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Puente soldado vía Directa en puerto ${PORT}`));
+
