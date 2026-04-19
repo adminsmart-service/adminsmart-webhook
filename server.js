@@ -89,18 +89,41 @@ app.post('/chat-publico', async (req, res) => {
         
         res.json({ respuesta: respuestaIA });
 
-    } catch (error) {
-        console.error("🔥 ERROR DETECTADO:");
+   } catch (error) {
+        console.error("🔥 ERROR EN EL SISTEMA:");
+        
+        // Log detallado para vos en Render
         if (error.response) {
-            // Error que viene de Google
             console.error("Detalle Google:", JSON.stringify(error.response.data));
-            res.status(500).json({ respuesta: "Error de IA", debug: error.response.data.error?.message });
         } else {
-            // Error de código
-            console.error("Mensaje:", error.message);
-            res.status(500).json({ respuesta: "Error interno", debug: error.message });
+            console.error("Mensaje de error:", error.message);
         }
-    }
+
+        try {
+            // 1. Intentamos obtener el teléfono del usuario para el link de WhatsApp
+            // Usamos los datos que ya pedimos al principio (userData)
+            const userRef = db.collection('users').doc(userId);
+            const userDoc = await userRef.get();
+            const userData = userDoc.data();
+            const telefono = userData?.config?.phone || ""; // Buscamos el campo phone
+            
+            let mensajeErrorVendedor = "¡Hola! En este momento estoy actualizando mi catálogo para darte la mejor información. 😅\n\n";
+            mensajeErrorVendedor += "Mientras tanto, podés usar el **Menú de opciones** de aquí abajo o, si preferís, escribinos directamente por WhatsApp para una **atención personalizada**.";
+
+            // 2. Si hay teléfono, agregamos el link directo
+            if (telefono) {
+                const linkWA = `https://wa.me/${telefono.replace(/\+/g, '').replace(/\s/g, '')}`;
+                mensajeErrorVendedor += `\n\n👉 Chatear por WhatsApp: ${linkWA}`;
+            }
+
+            res.json({ respuesta: mensajeErrorVendedor });
+
+        } catch (innerError) {
+            // Si incluso falla la búsqueda en Firebase, mandamos un mensaje genérico amable
+            res.json({ 
+                respuesta: "¡Hola! Estamos recibiendo muchas consultas. Por favor, utilizá el menú de opciones o intentá escribirnos nuevamente en unos minutos. ¡Gracias por tu paciencia! 🙏" 
+            });
+        }
 });
 
 const PORT = process.env.PORT || 3000;
