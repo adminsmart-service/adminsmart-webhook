@@ -105,7 +105,7 @@ app.post('/chat-publico', async (req, res) => {
             const userRef = db.collection('users').doc(userId);
             const userDoc = await userRef.get();
             const userData = userDoc.data();
-            const telefono = userData?.config?.phone || ""; // Buscamos el campo phone
+            const telefono = userData?.config?.phoneSales || ""; // Buscamos el campo phone
             
             let mensajeErrorVendedor = "¡Hola! En este momento estoy actualizando mi catálogo para darte la mejor información. 😅\n\n";
             mensajeErrorVendedor += "Mientras tanto, podés usar el **Menú de opciones** de aquí abajo o, si preferís, escribinos directamente por WhatsApp para una **atención personalizada**.";
