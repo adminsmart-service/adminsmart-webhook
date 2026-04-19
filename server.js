@@ -124,6 +124,7 @@ app.post('/chat-publico', async (req, res) => {
                 respuesta: "¡Hola! Estamos recibiendo muchas consultas. Por favor, utilizá el menú de opciones o intentá escribirnos nuevamente en unos minutos. ¡Gracias por tu paciencia! 🙏" 
             });
         }
+    }
 });
 
 const PORT = process.env.PORT || 3000;
