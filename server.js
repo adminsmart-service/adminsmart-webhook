@@ -73,7 +73,7 @@ app.post('/chat-publico', async (req, res) => {
         INSTRUCCIONES: Sé amable, usa emojis y responde a: "${mensaje}"`;
 
         // 5. CAMINO DIRECTO A GEMINI (Usando Axios)
-       const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${process.env.GEMINI_API_KEY.trim()}`;
+       const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY.trim()}`;
         
         const response = await axios.post(GEMINI_URL, {
             contents: [{
