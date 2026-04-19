@@ -111,12 +111,7 @@ app.post('/chat-publico', async (req, res) => {
             mensajeErrorVendedor += "Mientras tanto, podés usar el **Menú de opciones** de aquí abajo o, si preferís, escribinos directamente por WhatsApp para una **atención personalizada**.";
 
             // 2. Si hay teléfono, agregamos el link directo
-            if (telefono) {
-                const linkWA = `https://wa.me/${telefono.replace(/\+/g, '').replace(/\s/g, '')}`;
-                mensajeErrorVendedor += `\n\n👉 Chatear por WhatsApp: ${linkWA}`;
-            }
-
-            res.json({ respuesta: mensajeErrorVendedor });
+            const telefono = userData?.config?.phoneSales || "";
 
         } catch (innerError) {
             // Si incluso falla la búsqueda en Firebase, mandamos un mensaje genérico amable
