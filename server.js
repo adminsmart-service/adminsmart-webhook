@@ -100,27 +100,35 @@ app.post('/chat-publico', async (req, res) => {
         }
 
         try {
-            // 1. Intentamos obtener el teléfono del usuario para el link de WhatsApp
-            // Usamos los datos que ya pedimos al principio (userData)
+            // 1. Buscamos el teléfono correcto en Firebase
             const userRef = db.collection('users').doc(userId);
             const userDoc = await userRef.get();
             const userData = userDoc.data();
-            const telefono = userData?.config?.phoneSales || ""; // Buscamos el campo phone
+            const telefono = userData?.config?.phoneSales || ""; 
             
-            let mensajeErrorVendedor = "¡Hola! En este momento estoy actualizando mi catálogo para darte la mejor información. 😅\n\n";
-            mensajeErrorVendedor += "Mientras tanto, podés usar el **Menú de opciones** de aquí abajo o, si preferís, escribinos directamente por WhatsApp para una **atención personalizada**.";
+            // 2. Si hay teléfono, mandamos el mensaje con la ETIQUETA que activa el botón
+            if (telefono) {
+                const numeroLimpio = telefono.replace(/\+/g, '').replace(/\s/g, '');
+                
+                return res.json({ 
+                    respuesta: "¡Hola! En este momento estoy actualizando mi catálogo. 😅\n\nSi necesitás una atención personalizada o querés cerrar una compra ahora mismo, tocá el siguiente botón: [BOTON_WHATSAPP]",
+                    telefono: numeroLimpio 
+                });
+            }
 
-            // 2. Si hay teléfono, agregamos el link directo
-            const telefono = userData?.config?.phoneSales || "";
+            // 3. Si no hay teléfono, mandamos un mensaje amable sin botón
+            res.json({ 
+                respuesta: "¡Hola! Estamos actualizando la información. Por favor, utilizá el menú de opciones o intentá escribirnos nuevamente en unos minutos. 🙏" 
+            });
 
         } catch (innerError) {
-            // Si incluso falla la búsqueda en Firebase, mandamos un mensaje genérico amable
+            // Si falla la base de datos (Firebase), último recurso
             res.json({ 
-                respuesta: "¡Hola! Estamos recibiendo muchas consultas. Por favor, utilizá el menú de opciones o intentá escribirnos nuevamente en unos minutos. ¡Gracias por tu paciencia! 🙏" 
+                respuesta: "¡Hola! Estamos recibiendo muchas consultas. Por favor, utilizá el menú de opciones o escribinos en un momento. ¡Gracias! 🙏" 
             });
         }
-    }
-});
+    } // Cierra el catch (error) principal
+}); // Cierra el app.post
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Puente soldado vía Directa en puerto ${PORT}`));
