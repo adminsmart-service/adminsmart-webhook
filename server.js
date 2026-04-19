@@ -62,6 +62,39 @@ app.post('/chat-publico', async (req, res) => {
             const d = doc.data();
             contextoFaqs += `P: ${d.question || d.pregunta} - R: ${d.answer || d.respuesta}\n`;
         });
+      // 4. CONFIGURACIÓN DINÁMICA DE GEMINI
+        const nombreEmpresa = userData.nombreEmpresa || "nuestro negocio";
+        const historialPrevio = req.body.historial || [];
+
+        const body = {
+            contents: [
+                ...historialPrevio, 
+                { role: "user", parts: [{ text: mensaje }] }
+            ],
+            systemInstruction: {
+                parts: [{ 
+                    text: `Eres el asistente virtual de ${nombreEmpresa}. 
+                    Tu objetivo es ayudar a los clientes basándote ÚNICAMENTE en la siguiente información:
+                    
+                    DATOS Y PREGUNTAS FRECUENTES:
+                    ${contextoFaqs}
+                    
+                    REGLAS DE ORO:
+                    1. No inventes información que no esté en las FAQs.
+                    2. Si el historial muestra que ya saludaste, NO repitas el saludo.
+                    3. No repitas respuestas que ya diste anteriormente en el chat.
+                    4. Sé breve, amable y profesional.` 
+                }]
+            }
+        };
+
+        const response = await axios.post(GEMINI_URL, body);
+        
+        if (response.data.candidates && response.data.candidates[0].content) {
+            const respuestaIA = response.data.candidates[0].content.parts[0].text;
+            await userRef.update({ msgCount: currentCount + 1 });
+            return res.json({ respuesta: respuestaIA });
+        }
 
         // 4. ARMAR EL PROMPT
         const businessName = userData.config?.businessName || 'nuestra empresa';
