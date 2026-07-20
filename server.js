@@ -62,70 +62,56 @@ app.post('/chat-publico', async (req, res) => {
             const d = doc.data();
             contextoFaqs += `P: ${d.question || d.pregunta} - R: ${d.answer || d.respuesta}\n`;
         });
-      // 4. CONFIGURACIÓN DINÁMICA DE GEMINI
-        const nombreEmpresa = userData.nombreEmpresa || "nuestro negocio";
+
+        // 4. CONFIGURACIÓN DE PROMPT Y DATOS DE EMPRESA
+        const nombreEmpresa = userData.nombreEmpresa || userData.config?.businessName || "nuestro negocio";
+        const catalog = userData.config?.catalogUrl ? 'Catálogo: ' + userData.config.catalogUrl : '';
         const historialPrevio = req.body.historial || [];
 
-        const body = {
+        const bodyGemini = {
             contents: [
                 ...historialPrevio, 
                 { role: "user", parts: [{ text: mensaje }] }
             ],
             systemInstruction: {
                 parts: [{ 
-                    text: `Eres el asistente virtual de ${nombreEmpresa}. 
+                    text: `Eres el asistente virtual y de ventas inteligente de ${nombreEmpresa}. 
                     Tu objetivo es ayudar a los clientes basándote ÚNICAMENTE en la siguiente información:
                     
                     DATOS Y PREGUNTAS FRECUENTES:
                     ${contextoFaqs}
+                    ${catalog}
                     
                     REGLAS DE ORO:
                     1. No inventes información que no esté en las FAQs.
                     2. Si el historial muestra que ya saludaste, NO repitas el saludo.
                     3. No repitas respuestas que ya diste anteriormente en el chat.
-                    4. Sé breve, amable y profesional.` 
+                    4. Sé breve, amable, profesional y usa emojis cuando sea oportuno.` 
                 }]
             }
         };
 
-        const response = await axios.post(GEMINI_URL, body);
-        
-        if (response.data.candidates && response.data.candidates[0].content) {
-            const respuestaIA = response.data.candidates[0].content.parts[0].text;
-            await userRef.update({ msgCount: currentCount + 1 });
+        // 5. CAMINO DIRECTO A GEMINI
+        const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+        const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+
+        const geminiRes = await axios.post(GEMINI_URL, bodyGemini);
+
+        // 6. EXTRAER RESPUESTA, ACTUALIZAR CONTADOR Y RESPONDER AL CHAT
+        if (geminiRes.data.candidates && geminiRes.data.candidates[0].content) {
+            const respuestaIA = geminiRes.data.candidates[0].content.parts[0].text;
+
+            // Incrementamos contador
+            await userRef.update({ msgCount: admin.firestore.FieldValue.increment(1) });
+
             return res.json({ respuesta: respuestaIA });
         }
 
-        // 4. ARMAR EL PROMPT
-        const businessName = userData.config?.businessName || 'nuestra empresa';
-        const catalog = userData.config?.catalogUrl ? 'Catálogo: ' + userData.config.catalogUrl : '';
-        
-        const promptTexto = `Eres el asistente de ventas inteligente de "${businessName}".
-        CONOCIMIENTO: ${contextoFaqs}
-        ${catalog}
-        INSTRUCCIONES: Sé amable, usa emojis y responde a: "${mensaje}"`;
+        throw new Error("Gemini no devolvió texto válido.");
 
-        // 5. CAMINO DIRECTO A GEMINI (Usando Axios)
-       const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY.trim()}`;
-        
-        const response = await axios.post(GEMINI_URL, {
-            contents: [{
-                parts: [{ text: promptTexto }]
-            }]
-        });
-
-        // Extraemos el texto de la respuesta de Google
-        const respuestaIA = response.data.candidates[0].content.parts[0].text;
-
-        // 6. ACTUALIZAR CONTADOR Y RESPONDER
-        await userRef.update({ msgCount: admin.firestore.FieldValue.increment(1) });
-        
-        res.json({ respuesta: respuestaIA });
-
-   } catch (error) {
+    } catch (error) {
         console.error("🔥 ERROR EN EL SISTEMA:");
         
-        // Log detallado para vos en Render
         if (error.response) {
             console.error("Detalle Google:", JSON.stringify(error.response.data));
         } else {
@@ -133,13 +119,12 @@ app.post('/chat-publico', async (req, res) => {
         }
 
         try {
-            // 1. Buscamos el teléfono correcto en Firebase
+            // Manejo de respaldo y activación del Botón de WhatsApp
             const userRef = db.collection('users').doc(userId);
             const userDoc = await userRef.get();
             const userData = userDoc.data();
             const telefono = userData?.config?.phoneSales || ""; 
             
-            // 2. Si hay teléfono, mandamos el mensaje con la ETIQUETA que activa el botón
             if (telefono) {
                 const numeroLimpio = telefono.replace(/\+/g, '').replace(/\s/g, '');
                 
@@ -149,19 +134,17 @@ app.post('/chat-publico', async (req, res) => {
                 });
             }
 
-            // 3. Si no hay teléfono, mandamos un mensaje amable sin botón
             res.json({ 
                 respuesta: "¡Hola! Estamos actualizando la información. Por favor, utilizá el menú de opciones o intentá escribirnos nuevamente en unos minutos. 🙏" 
             });
 
         } catch (innerError) {
-            // Si falla la base de datos (Firebase), último recurso
             res.json({ 
                 respuesta: "¡Hola! Estamos recibiendo muchas consultas. Por favor, utilizá el menú de opciones o escribinos en un momento. ¡Gracias! 🙏" 
             });
         }
-    } // Cierra el catch (error) principal
-}); // Cierra el app.post
+    }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Puente soldado vía Directa en puerto ${PORT}`));
